@@ -1,10 +1,19 @@
-# TWS passkey fix
+# IBKR TWS passkey fix
 
-## What this repo is for
+A temporary workaround for phone-passkey authentication failures in IBKR Trader
+Workstation (TWS) on Linux.
 
-A repeatable, manual workaround for phone-passkey login failures in native Linux
-Interactive Brokers Trader Workstation (TWS). It includes a JxBrowser JAR patcher
-and a repo-local agent skill, `tws-passkey-patch`.
+> **Disclaimer:** This is not an official IBKR solution and has neither been
+> verified nor recommended by IBKR. Use it at your own risk.
+
+## Who this repo is for
+
+This workaround is for Linux users whose TWS phone-passkey login stalls after
+scanning the QR code, with an “unable to connect” message on their phone.
+
+Tested successfully on **Arch Linux (rolling release), x86-64**, with **TWS
+launcher build `10511b` (10.51 series)** and the replacement runtime below.
+Other TWS builds and Linux distributions have not been verified.
 
 ## The problem
 
@@ -13,9 +22,29 @@ embedded passkey flow displays a QR code but can stall and end with a WebAuthn
 `NotAllowedError`. The same phone passkey succeeds in a normal browser on the
 same Linux machine.
 
-Replacing the embedded browser runtime produced successful TWS logins. A
-Chromium Bluetooth/caBLE discovery issue is suspected, but the precise defect
-has not been conclusively proven.
+### Suspected underlying cause
+
+Phone-passkey login uses **hybrid authentication (caBLE v2)**. Scanning the QR
+code is only the first step: Chromium must also recognize the phone's Bluetooth
+Low Energy advertisement before establishing the authentication tunnel.
+
+Chromium 138's older discovery helper caches device observations. Its duplicate
+check compares legacy caBLE discovery data and service UUIDs, **not the complete
+caBLE v2 advertisement payload**. If BlueZ initially reports the phone without
+service data, then supplies the 20-byte payload later while the UUIDs remain
+unchanged, Chromium can incorrectly discard that update as a duplicate. The
+valid advertisement never reaches QR-session matching. [1]
+
+This fits the observed failure: diagnostic logs recorded `Service data: <none>`
+for a FIDO-advertising device, followed by a timeout. The resulting
+`NotAllowedError` is therefore not necessarily a rejected or invalid passkey.
+
+Chromium 147 uses a newer discovery path that reads the full v2 payload on device
+updates and deduplicates the advertisement bytes themselves. Replacing TWS's
+embedded runtime with that version produced successful logins. [2]
+
+**This remains a suspected explanation, not a conclusively proven root cause in
+the JxBrowser build shipped by IBKR.**
 
 ## The fix
 
@@ -27,8 +56,7 @@ Replace these three JARs together with official **JxBrowser 8.18.3 / Chromium 14
 
 The patcher verifies pinned SHA-256 hashes, preserves TWS's expected filenames,
 backs up the existing JARs, and restores them if a replacement fails midway.
-An already-patched installation is left unchanged. Authentication, licensing,
-settings, and Java font-antialiasing options are not modified.
+An already-patched installation is left unchanged.
 
 ### Prerequisites and use
 
@@ -39,7 +67,7 @@ settings, and Java font-antialiasing options are not modified.
 **Close TWS first**, then run:
 
 ```sh
-cd ~/projects/tws-passkey-fix
+cd ~/projects/ibkr-tws-passkey-fix
 python3 ./patch-jxbrowser.py
 ```
 
@@ -55,9 +83,9 @@ python3 ./patch-jxbrowser.py --download-only
 python3 ./patch-jxbrowser.py --work-dir /path/to/runtime-storage --tws-dir /path/to/TWS
 ```
 
-For agent-assisted patching, start Pi in this repo, grant project trust when
-prompted, and invoke `/skill:tws-passkey-patch`. The local skill lives in
-`.agents/skills/tws-passkey-patch/SKILL.md`.
+## Agent skill
+
+The agent local skill lives in `.agents/skills/tws-passkey-patch/SKILL.md`.
 
 ## Limitations
 
@@ -79,3 +107,9 @@ python3 -m unittest discover -s tests -v
 
 Tests use temporary files and mocked downloads, not a real TWS session.
 Runtime JARs, backups, account data, and credentials are not tracked in this repo.
+
+## Sources
+
+[1] https://raw.githubusercontent.com/chromium/chromium/138.0.7204.184/device/fido/cable/fido_cable_discovery.cc
+
+[2] https://raw.githubusercontent.com/chromium/chromium/147.0.7727.56/device/fido/cable/v2_discovery.cc

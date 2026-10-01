@@ -16,9 +16,10 @@ this skill directory, not the shell's current working directory.
    `~/Applications/TWS-Passkey/tws/`, **not** `~/Applications/Jts`. Use another
    target only if the user explicitly identifies it. If the target is absent,
    ask for its location; this script does not install or clone TWS.
-2. Check whether that TWS copy is running. The script refuses a busy launch lock
-   or matching live process. If it is running, ask the user to close it unless
-   they already authorized a restart. Do not forcibly kill a trading session.
+2. Confirm that the target TWS copy is closed before patching. The script checks
+   for matching live processes, but detection is best-effort. If it is running,
+   ask the user to close it unless they already authorized a restart. Do not
+   forcibly kill a trading session.
 3. Run the repo patcher with Python 3. For the default installation:
 
    ```sh
@@ -33,7 +34,7 @@ this skill directory, not the shell's current working directory.
    ```
 
    The default work directory is `~/Applications/TWS-Passkey/`. It holds the
-   separately preserved runtime, backups, and the lock used by `launch-tws.sh`.
+   separately preserved runtime, backups, and the patcher's runtime lock.
    `--download-only` restores missing runtime files without patching TWS.
 4. Require exit status zero. The script checks all three pinned vendor hashes,
    validates the destination layout, backs up the current JARs, stages and
@@ -44,8 +45,9 @@ this skill directory, not the shell's current working directory.
 5. Report the target, runtime version, whether replacement was performed, and
    the printed backup directory when applicable. Do not claim a login or full
    compatibility test unless one was actually performed.
-6. Relaunch only if requested, using the existing dedicated `launch-tws.sh`.
-   Leave the phone-passkey authentication to the user.
+6. Relaunch only if requested, using the patched installation's normal TWS
+   launcher. No custom launcher is required. Leave the phone-passkey
+   authentication to the user.
 
 ## Boundaries
 
